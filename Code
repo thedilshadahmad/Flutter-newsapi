@@ -1,0 +1,154 @@
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
+void main() => runApp(MyApp());
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'News App',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
+      home: NewsScreen(),
+    );
+  }
+}
+
+class NewsScreen extends StatefulWidget {
+  @override
+  _NewsScreenState createState() => _NewsScreenState();
+}
+
+class _NewsScreenState extends State<NewsScreen> {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  User _user;
+
+  @override
+  void initState() {
+    super.initState();
+    _getUser();
+  }
+
+  void _getUser() async {
+    _user = _auth.currentUser;
+    if (_user == null) {
+      // Perform login or registration
+      // ...
+    }
+  }
+
+  Future<List<Article>> _fetchNews() async {
+    final response = await http.get(
+      'https://newsapi.org/v2/top-headlines?country=us&apiKey=YOUR_API_KEY',
+    );
+
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> data = json.decode(response.body);
+      List<Article> articles = (data['articles'] as List)
+          .map((articleData) => Article.fromJson(articleData))
+          .toList();
+      return articles;
+    } else {
+      throw Exception('Failed to load news');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('News App'),
+      ),
+      body: FutureBuilder<List<Article>>(
+        future: _fetchNews(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(child: CircularProgressIndicator());
+          } else if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          } else if (!snapshot.hasData || snapshot.data.isEmpty) {
+            return Center(child: Text('No news available'));
+          } else {
+            return NewsList(articles: snapshot.data);
+          }
+        },
+      ),
+    );
+  }
+}
+
+class NewsList extends StatelessWidget {
+  final List<Article> articles;
+
+  NewsList({required this.articles});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      itemCount: articles.length,
+      itemBuilder: (context, index) {
+        return ListTile(
+          title: Text(articles[index].title),
+          subtitle: Text(articles[index].description),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => NewsDetailScreen(article: articles[index]),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class NewsDetailScreen extends StatelessWidget {
+  final Article article;
+
+  NewsDetailScreen({required this.article});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(article.title),
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Image.network(article.urlToImage),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(article.description),
+          ),
+          // Add more details as needed
+        ],
+      ),
+    );
+  }
+}
+
+class Article {
+  final String title;
+  final String description;
+  final String urlToImage;
+  // Add more fields as needed
+
+  Article({required this.title, required this.description, required this.urlToImage});
+
+  factory Article.fromJson(Map<String, dynamic> json) {
+    return Article(
+      title: json['title'],
+      description: json['description'],
+      urlToImage: json['urlToImage'],
+    );
+  }
+}
